@@ -1,366 +1,315 @@
-import React, { useState } from 'react';
-import { Calendar, Clock, User, MapPin, Video, Phone, MessageSquare, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  AlertCircle,
+  Calendar,
+  CheckCircle,
+  MessageSquare,
+  Phone,
+  User,
+} from 'lucide-react';
 
 interface BookingSystemProps {
   userType: string;
+  user: {
+    instituteID?: string;
+    [key: string]: unknown;
+  } | null;
 }
 
-const BookingSystem: React.FC<BookingSystemProps> = ({ userType }) => {
+interface Counsellor {
+  _id: string;
+  name: string;
+  email: string;
+  instituteID: string;
+}
+
+interface CounsellorResponse {
+  counsellors?: Counsellor[];
+  message?: string;
+}
+
+interface BookingResponse {
+  message?: string;
+}
+
+const BookingSystem: React.FC<BookingSystemProps> = ({ userType, user }) => {
+  const [counsellors, setCounsellors] = useState<Counsellor[]>([]);
+  const [selectedCounsellor, setSelectedCounsellor] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [selectedCounselor, setSelectedCounselor] = useState('');
-  const [sessionType, setSessionType] = useState('in-person');
-  const [reason, setReason] = useState('');
-  const [urgency, setUrgency] = useState('normal');
+  const [sessionType, setSessionType] = useState('chat');
+  const [description, setDescription] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
-  const counselors = [
-    {
-      id: '1',
-      name: 'Dr. Priya Sharma',
-      specialization: 'Anxiety & Depression',
-      languages: ['Hindi', 'English', 'Urdu'],
-      rating: 4.9,
-      experience: '8 years',
-      available: true,
-      nextSlot: '2:00 PM Today'
-    },
-    {
-      id: '2',
-      name: 'Dr. Rajesh Kumar',
-      specialization: 'Academic Stress & Career Counseling',
-      languages: ['Hindi', 'English', 'Punjabi'],
-      rating: 4.7,
-      experience: '12 years',
-      available: true,
-      nextSlot: '4:00 PM Today'
-    },
-    {
-      id: '3',
-      name: 'Dr. Fatima Ali',
-      specialization: 'Trauma & PTSD',
-      languages: ['Urdu', 'English', 'Hindi'],
-      rating: 4.8,
-      experience: '6 years',
-      available: false,
-      nextSlot: 'Tomorrow 10:00 AM'
-    }
-  ];
+  useEffect(() => {
+    const fetchCounsellors = async () => {
+      if (!user?.instituteID) {
+        setCounsellors([]);
+        return;
+      }
+
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `http://localhost:5000/api/counsellors/institute/${user.instituteID}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data: CounsellorResponse = await response.json();
+
+        if (!response.ok) {
+          setError(data.message || 'Failed to load counsellors');
+          return;
+        }
+
+        setCounsellors(data.counsellors || []);
+      } catch {
+        setError('Network error while loading counsellors');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCounsellors();
+  }, [user?.instituteID]);
 
   const timeSlots = [
-    '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+    '9:00 AM',
+    '10:00 AM',
+    '11:00 AM',
+    '12:00 PM',
+    '1:00 PM',
+    '2:00 PM',
+    '3:00 PM',
+    '4:00 PM',
+    '5:00 PM',
   ];
 
-  const sessionTypes = [
-    { id: 'in-person', label: 'In-Person', icon: User, description: 'Face-to-face session on campus' },
-    { id: 'video', label: 'Video Call', icon: Video, description: 'Online video consultation' },
-    { id: 'phone', label: 'Phone Call', icon: Phone, description: 'Audio-only consultation' },
-    { id: 'chat', label: 'Text Chat', icon: MessageSquare, description: 'Secure text-based session' }
-  ];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Handle booking submission
-    alert('Booking request submitted successfully! You will receive a confirmation shortly.');
+    setIsSubmitting(true);
+    setError('');
+
+    if (!selectedCounsellor || !selectedDate || !selectedTime || !sessionType) {
+      setError('Please fill in all required fields');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          counsellorId: selectedCounsellor,
+          date: selectedDate,
+          time: selectedTime,
+          type: sessionType,
+          description: description.trim() || undefined,
+        }),
+      });
+
+      const data: BookingResponse = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'Booking failed');
+        return;
+      }
+
+      setSuccess(true);
+      setSelectedCounsellor('');
+      setSelectedDate('');
+      setSelectedTime('');
+      setSessionType('chat');
+      setDescription('');
+      setTimeout(() => setSuccess(false), 3000);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  if (userType === 'counselor') {
+  if (userType !== 'student') {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Session Management</h2>
-          <p className="text-gray-600">Manage your counseling sessions and availability</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Today's Schedule */}
-          <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Schedule</h3>
-            <div className="space-y-4">
-              {[
-                { time: '10:00 AM', student: 'Anonymous Student #1247', type: 'Video Call', urgent: false },
-                { time: '11:30 AM', student: 'Anonymous Student #0823', type: 'In-Person', urgent: true },
-                { time: '2:00 PM', student: 'Anonymous Student #1456', type: 'Phone Call', urgent: false },
-                { time: '3:30 PM', student: 'Anonymous Student #0934', type: 'Video Call', urgent: false },
-              ].map((appointment, index) => (
-                <div key={index} className={`flex items-center justify-between p-4 rounded-lg border-2 ${
-                  appointment.urgent ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
-                }`}>
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                      appointment.urgent ? 'bg-red-100' : 'bg-blue-100'
-                    }`}>
-                      <Clock className={`h-6 w-6 ${appointment.urgent ? 'text-red-600' : 'text-blue-600'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{appointment.time}</p>
-                      <p className="text-sm text-gray-600">{appointment.student}</p>
-                      <p className="text-xs text-gray-500">{appointment.type}</p>
-                    </div>
-                  </div>
-                  {appointment.urgent && (
-                    <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
-                      Urgent
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors">
-                  Update Availability
-                </button>
-                <button className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors">
-                  Emergency Session
-                </button>
-                <button className="w-full bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition-colors">
-                  Session Notes
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Requests</h3>
-              <div className="text-center">
-                <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl font-bold text-orange-600">3</span>
-                </div>
-                <p className="text-sm text-gray-600">New booking requests</p>
-                <button className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
-                  Review All
-                </button>
-              </div>
-            </div>
-          </div>
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+          <AlertCircle className="h-12 w-12 text-yellow-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-yellow-800 mb-2">Access Restricted</h3>
+          <p className="text-yellow-700">Only students can book counselling sessions.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-4xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Book a Counseling Session</h2>
-        <p className="text-gray-600">Schedule a confidential session with our mental health professionals</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Book a Session</h1>
+        <p className="text-gray-600">
+          Schedule a counselling session with a professional from your institute
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <form onSubmit={handleSubmit} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-6">
-            {/* Urgency Level */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                How urgent is this session?
-              </label>
-              <div className="grid grid-cols-3 gap-4">
-                {[
-                  { id: 'normal', label: 'Normal', color: 'bg-green-100 text-green-800 border-green-200' },
-                  { id: 'urgent', label: 'Urgent', color: 'bg-orange-100 text-orange-800 border-orange-200' },
-                  { id: 'emergency', label: 'Emergency', color: 'bg-red-100 text-red-800 border-red-200' }
-                ].map((level) => (
-                  <button
-                    key={level.id}
-                    type="button"
-                    onClick={() => setUrgency(level.id)}
-                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      urgency === level.id ? level.color : 'bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+      {success && (
+        <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
+          <CheckCircle className="h-5 w-5 mr-2" />
+          Booking request submitted successfully! You will receive a confirmation soon.
+        </div>
+      )}
 
-            {/* Session Type */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                Preferred Session Type
+                Select Counsellor *
               </label>
-              <div className="grid grid-cols-2 gap-4">
-                {sessionTypes.map((type) => {
-                  const Icon = type.icon;
-                  return (
+              {isLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
+                  <p className="text-gray-500 mt-2">Loading counsellors...</p>
+                </div>
+              ) : counsellors.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  No counsellors available for your institute
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {counsellors.map((counsellor) => (
                     <button
-                      key={type.id}
+                      key={counsellor._id}
                       type="button"
-                      onClick={() => setSessionType(type.id)}
+                      onClick={() => setSelectedCounsellor(counsellor._id)}
                       className={`p-4 rounded-lg border-2 text-left transition-all ${
-                        sessionType === type.id
+                        selectedCounsellor === counsellor._id
                           ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 bg-gray-50 hover:border-blue-300'
+                          : 'border-gray-200 hover:border-blue-300'
                       }`}
                     >
                       <div className="flex items-center space-x-3">
-                        <Icon className={`h-5 w-5 ${
-                          sessionType === type.id ? 'text-blue-600' : 'text-gray-400'
-                        }`} />
+                        <User className="h-8 w-8 text-blue-600" />
                         <div>
-                          <div className={`font-medium ${
-                            sessionType === type.id ? 'text-blue-900' : 'text-gray-900'
-                          }`}>
-                            {type.label}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {type.description}
-                          </div>
+                          <div className="font-medium text-gray-900">{counsellor.name}</div>
+                          <div className="text-sm text-gray-500">{counsellor.email}</div>
                         </div>
                       </div>
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Counselor Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Date *
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                Choose a Counselor (Optional)
+                Select Time *
               </label>
-              <div className="space-y-3">
-                {counselors.map((counselor) => (
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                {timeSlots.map((time) => (
                   <button
-                    key={counselor.id}
+                    key={time}
                     type="button"
-                    onClick={() => setSelectedCounselor(counselor.id)}
-                    disabled={!counselor.available && urgency === 'normal'}
-                    className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
-                      selectedCounselor === counselor.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : counselor.available
-                        ? 'border-gray-200 bg-gray-50 hover:border-blue-300'
-                        : 'border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed'
+                    onClick={() => setSelectedTime(time)}
+                    className={`p-2 text-sm rounded-lg border transition-all ${
+                      selectedTime === time
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-blue-300'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{counselor.name}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{counselor.specialization}</p>
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className="text-xs text-gray-500">
-                            Languages: {counselor.languages.join(', ')}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {counselor.experience} experience
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-medium text-yellow-600">
-                          ⭐ {counselor.rating}
-                        </div>
-                        <div className={`text-xs mt-1 ${
-                          counselor.available ? 'text-green-600' : 'text-orange-600'
-                        }`}>
-                          Next: {counselor.nextSlot}
-                        </div>
-                      </div>
-                    </div>
+                    {time}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Date and Time */}
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preferred Date
-                </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preferred Time
-                </label>
-                <select
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Session Type *
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSessionType('chat')}
+                  className={`flex items-center space-x-3 p-3 rounded-lg border-2 transition-all ${
+                    sessionType === 'chat'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                  }`}
                 >
-                  <option value="">Select Time</option>
-                  {timeSlots.map((time) => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
-                </select>
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium">Chat Session</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSessionType('phone_call')}
+                  className={`flex items-center space-x-3 p-3 rounded-lg border-2 transition-all ${
+                    sessionType === 'phone_call'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                  }`}
+                >
+                  <Phone className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium">Phone Call</span>
+                </button>
               </div>
             </div>
 
-            {/* Reason for Session */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Brief description (Optional)
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description (Optional)
               </label>
               <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={4}
-                placeholder="Help us understand what you'd like to discuss (this remains confidential)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Briefly describe what you'd like to discuss..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               />
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+              disabled={isSubmitting || counsellors.length === 0}
+              className="w-full bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-green-700 transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Calendar className="h-5 w-5" />
-              <span>Book Session</span>
+              <span>{isSubmitting ? 'Booking...' : 'Book Session'}</span>
             </button>
           </form>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Emergency Support */}
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-red-800 mb-3">Need Immediate Help?</h3>
-            <div className="space-y-3">
-              <button className="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2">
-                <Phone className="h-4 w-4" />
-                <span>Emergency Helpline</span>
-              </button>
-              <p className="text-sm text-red-700">
-                Available 24/7 for crisis support
-              </p>
-            </div>
-          </div>
-
-          {/* Booking Guidelines */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Booking Guidelines</h3>
-            <ul className="space-y-3 text-sm text-gray-600">
-              <li className="flex items-start space-x-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>All sessions are completely confidential</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>Cancel or reschedule up to 2 hours before</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>Emergency sessions available within 1 hour</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span>Multi-language support available</span>
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>

@@ -1,45 +1,71 @@
 import React, { useState } from 'react';
-import { Heart, Lock, User, Shield } from 'lucide-react';
+import { Heart, Lock, Shield } from 'lucide-react';
+
+interface AuthUser {
+  role: string;
+  [key: string]: unknown;
+}
+
+interface LoginResponse {
+  token: string;
+  user: AuthUser;
+  message?: string;
+}
 
 interface LoginProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: AuthUser) => void;
   setUserType: (type: string) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, setUserType }) => {
-  const [selectedUserType, setSelectedUserType] = useState('student');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    institutionId: ''
+    instituteID: '',
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Mock login - in real implementation, this would authenticate with backend
-    const user = {
-      id: Math.random().toString(36),
-      name: selectedUserType === 'student' ? 'Yash' : 
-            selectedUserType === 'counselor' ? 'Dr. Sarah Khan' : 'Admin User',
-      email: formData.email,
-      type: selectedUserType
-    };
-    
-    setUserType(selectedUserType);
-    onLogin(user);
+  const handleChange = (field: keyof typeof formData, value: string) => {
+    setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const userTypes = [
-    { id: 'student', label: 'Student', icon: User, description: 'Access mental health support and resources' },
-    { id: 'counselor', label: 'Counselor', icon: Heart, description: 'Provide professional mental health services' },
-    { id: 'admin', label: 'Administrator', icon: Shield, description: 'Manage system and view analytics' }
-  ];
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data: LoginResponse = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'Login failed');
+        return;
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      setUserType(data.user.role);
+      onLogin(data.user);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-green-600 p-6 text-center">
           <div className="flex justify-center mb-4">
             <Heart className="h-12 w-12 text-white" />
@@ -50,68 +76,32 @@ const Login: React.FC<LoginProps> = ({ onLogin, setUserType }) => {
         </div>
 
         <div className="p-6">
-          {/* User Type Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Select Your Role
-            </label>
-            <div className="grid grid-cols-1 gap-2">
-              {userTypes.map((type) => {
-                const Icon = type.icon;
-                return (
-                  <button
-                    key={type.id}
-                    onClick={() => setSelectedUserType(type.id)}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-all duration-200 text-left ${
-                      selectedUserType === type.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <Icon className={`h-5 w-5 mt-0.5 ${
-                      selectedUserType === type.id ? 'text-blue-600' : 'text-gray-400'
-                    }`} />
-                    <div className="flex-1">
-                      <div className={`font-medium ${
-                        selectedUserType === type.id ? 'text-blue-900' : 'text-gray-900'
-                      }`}>
-                        {type.label}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {type.description}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email / Student ID
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
-                type="text"
+                type="email"
                 required
                 value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                onChange={(e) => handleChange('email', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your email or student ID"
+                placeholder="Enter your email"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
                 type="password"
                 required
                 value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
+                onChange={(e) => handleChange('password', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter your password"
               />
@@ -124,8 +114,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, setUserType }) => {
               <input
                 type="text"
                 required
-                value={formData.institutionId}
-                onChange={(e) => setFormData({...formData, institutionId: e.target.value})}
+                value={formData.instituteID}
+                onChange={(e) => handleChange('instituteID', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter your institution code"
               />
@@ -133,20 +123,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, setUserType }) => {
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-green-700 transition-all duration-200 flex items-center justify-center space-x-2"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-green-700 transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Lock className="h-4 w-4" />
-              <span>Sign In Securely</span>
+              <span>{isLoading ? 'Signing In...' : 'Sign In Securely'}</span>
             </button>
           </form>
 
           <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600 mb-2">
+              Don't have an account?{' '}
+              <a href="/register" className="text-blue-600 hover:text-blue-800 font-medium">
+                Register here
+              </a>
+            </p>
             <div className="text-xs text-gray-500">
-              <div className="flex items-center justify-center space-x-1 mb-2">
+              <div className="flex items-center justify-center space-x-1">
                 <Shield className="h-3 w-3" />
                 <span>Your privacy and confidentiality are protected</span>
               </div>
-              <p>For demo: Use any email/password combination</p>
             </div>
           </div>
         </div>
